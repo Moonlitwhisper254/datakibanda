@@ -1,0 +1,207 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int             @id @default(autoincrement())
+  name              String
+  email             String          @unique
+  phone             String          @unique
+  passwordHash      String
+  provider          Provider
+  isVerified        Boolean         @default(false)
+  balance           Decimal         @default(0.00) @db.Decimal(10, 2)
+  referralCode      String          @unique
+  referredBy        Int?
+  referrer          User?           @relation("Referrals", fields: [referredBy], references: [id])
+  referrals         User[]          @relation("Referrals")
+  failedLoginAttempts Int           @default(0)
+  lastFailedLogin   DateTime?
+  accountLockedUntil DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  transactions      Transaction[]
+  sentMessages      ChatMessage[]   @relation("SentMessages")
+  receivedMessages  ChatMessage[]   @relation("ReceivedMessages")
+  chatUser          ChatUser?
+  supportTickets    SupportTicket[]
+  verificationCodes VerificationCode[]
+}
+
+enum Provider {
+  Safaricom
+  Airtel
+  Telkom
+}
+
+model VerificationCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  type      CodeType
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+}
+
+enum CodeType {
+  email
+  sms
+}
+
+model DataPackage {
+  id          Int       @id @default(autoincrement())
+  provider    Provider
+  category    PackageCategory
+  name        String
+  description String?
+  amount      Decimal   @db.Decimal(10, 2)
+  validityDays Int
+  dataVolume  String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  // Relations
+  transactions Transaction[]
+}
+
+enum PackageCategory {
+  daily
+  weekly
+  monthly
+  youtube
+  tiktok
+  showmax
+}
+
+model Transaction {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  packageId       Int?
+  dataPackage     DataPackage? @relation(fields: [packageId], references: [id])
+  transactionCode String    @unique
+  amount          Decimal   @db.Decimal(10, 2)
+  phone           String
+  status          TransactionStatus @default(pending)
+  paymentMethod   PaymentMethod
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+}
+
+enum PaymentMethod {
+  mpesa
+  stripe
+  paypal
+}
+
+model Referral {
+  id            Int       @id @default(autoincrement())
+  referrerId    Int
+  referredId    Int       @unique
+  amountEarned  Decimal   @default(20.00) @db.Decimal(10, 2)
+  isPaid        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+}
+
+model SupportTicket {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  user          User      @relation(fields: [userId], references: [id])
+  subject       String
+  message       String    @db.Text
+  status        TicketStatus @default(open)
+  adminResponse String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum TicketStatus {
+  open
+  pending
+  resolved
+}
+
+model SystemLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int?
+  action      String
+  ipAddress   String
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+}
+
+// Chat system models
+model ChatUser {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socketId    String?
+  isOnline    Boolean   @default(false)
+  lastSeen    DateTime?
+}
+
+model ChatMessage {
+  id          Int       @id @default(autoincrement())
+  senderId    Int
+  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  Int
+  receiver    User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  message     String
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model ChatRoom {
+  id          Int       @id @default(autoincrement())
+  user1Id     Int
+  user2Id     Int
+  
+  @@unique([user1Id, user2Id])
+}
+
+model AuthSession {
+  id          String    @id @default(uuid())
+  userId      Int
+  deviceInfo  String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  isRevoked   Boolean   @default(false)
+}
+
+model CsrfToken {
+  token       String    @id
+  userId      Int
+  expiresAt   DateTime
+}
+
+model Webhook {
+  id          String    @id @default(uuid())
+  url         String
+  events      String[]
+  secret      String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
